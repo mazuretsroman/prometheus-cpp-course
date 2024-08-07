@@ -10,7 +10,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-int handleStep(int res) {
+int checkStep(int res) {
   if (res == -1) {
     std::cout << "Error: " << std::strerror(errno) << std::endl;
     exit(EXIT_FAILURE);
@@ -26,8 +26,8 @@ int main()
   addr.sin_family = AF_INET;
   addr.sin_port = htons(3001);
   inet_aton("127.0.0.1", &addr.sin_addr);
-  handleStep( bind(server, (struct sockaddr *)&addr, sizeof(addr)) );
-  handleStep( listen(server, 5) );
+  checkStep( bind(server, (struct sockaddr *)&addr, sizeof(addr)) );
+  checkStep( listen(server, 5) );
   std::cout << "Listening 3001..." << std::endl;
 
   // get request
@@ -35,12 +35,14 @@ int main()
   int fd = accept(server, (struct sockaddr *)&addr, &addrlen);
   ssize_t nread;
   char buff[256];
-  nread = handleStep( read(fd, buff, 256) );
+  nread = checkStep( read(fd, buff, 256) );
   if (nread == 0) std::cout << "End of file" << std::endl;
 
   // send response
-  write(STDOUT_FILENO, buff, nread);
-  write(fd, buff, nread);
+  std::string response = buff;
+  response.append(" from server.");
+  checkStep( write(STDOUT_FILENO, buff, nread) );
+  checkStep( write(fd, response.c_str(), sizeof(response)) );
 
   // stop server
   sleep(1);
