@@ -1,20 +1,13 @@
-#include <cstdlib>
 #include <iostream>
-#include <cstring>
-#include <sys/_endian.h>
-#include <sys/_types/_socklen_t.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <stdlib.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <vector>
 #include <regex>
 
 using namespace std;
 
-int checkStep(int res) {
+static int checkStep(int res) {
   if (res == -1) {
     cout << "Error: " << strerror(errno) << endl;
     exit(EXIT_FAILURE);
@@ -74,10 +67,19 @@ namespace Task {
   };
 }
 
+string const getCurrTime() {
+    time_t     now = time(0);
+    struct tm  tstruct;
+    char       buf[80];
+    tstruct = *localtime(&now);
+    strftime(buf, sizeof(buf), "%T", &tstruct);
+    return buf;
+};
+
 int main()
 {
   // init server
-  int server = socket(AF_INET, SOCK_STREAM, 0);
+  int server = checkStep( socket(AF_INET, SOCK_STREAM, 0) );
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
   addr.sin_port = htons(3001);
@@ -86,28 +88,38 @@ int main()
   // init awailable tasks
   vector<Task::Base> availableTasks = { Task::Sum(), Task::Mult(), Task::Max() };
 
-  bind(server, (struct sockaddr *)&addr, sizeof(addr));
-  checkStep( listen(server, 5) );
-  std::cout << "Listening 3001..." << std::endl;
+  int bind_res = checkStep( ::bind(server, (struct sockaddr *)&addr, sizeof(addr)) );
+  int listen_res = checkStep( listen(server, 5) );
+  bool is_listening = bind_res == 0 && listen_res == 0 ; 
+  if ( is_listening ) std::cout << "Listening 3001..." << std::endl;
 
   // get request
   socklen_t addrlen = sizeof(addr);
-  int fd = accept(server, (struct sockaddr *)&addr, &addrlen);
-  ssize_t nread;
+  int fd;
   char buff[256];
-  nread = checkStep( read(fd, buff, 256) );
-  if (nread == 0) std::cout << "End of file" << std::endl;
+  string response, current_time;
+  while ( true ) {
+    fd = checkStep( accept(server, (struct sockaddr *)&addr, &addrlen) );
+    checkStep( read(fd, buff, 256) );
+    // if (nread == 0) std::cout << "End of file" << std::endl;
+    // send response
+    response = buff;
+    response.append(" from server.");
+    current_time = getCurrTime();
+    cout << '[' << current_time << "] client: " << buff << endl;
+    checkStep( write(fd, response.c_str(), sizeof(response)) ); // number of written bytes
+    current_time = getCurrTime();
+    cout << '[' << current_time << "] server: " << response << endl;
 
-  // send response
-  std::string response = buff;
-  response.append(" from server.");
-  checkStep( write(STDOUT_FILENO, buff, nread) );
-  checkStep( write(fd, response.c_str(), sizeof(response)) );
+    close(fd);
+  }
 
-  // stop server
-  sleep(1);
-  close(fd);
-  close(server);
+  // if ( response.compare("0") == 0 ) {
+  //   // stop server
+  //   sleep(1);
+  //   close(fd);
+  //   close(server);
+  // } 
 
   return 0;
 }
