@@ -19,7 +19,7 @@ static int checkStep(int res) {
 
 namespace Task {
   struct Base {
-    string helloMsg = "Give me array of less than 10 integers separated by space \' \'.";
+    string helloMsg = "Give me array of less than 10 integers separated by space";
     string name = "Base";
 
     string call(string args) { return args; };
@@ -36,7 +36,6 @@ namespace Task {
 	      for (sregex_iterator i = words_begin; i != words_end; ++i)
         {
           smatch match = *i;
-          // TODO: catch std::invalid_argument: stoi: no conversion
           parsedArgs.push_back(stoi( match.str() ));
         }
       };
@@ -47,7 +46,11 @@ namespace Task {
       parseArgs(args);
 
       int sum = 0;
-      for ( int el : this->parsedArgs ) sum += el;
+      for ( int el : this->parsedArgs ){
+        cout << "el: " << el << endl;
+        sum += el;
+        cout << "sum: " << sum << endl;
+      } 
 
       return to_string(sum);
     }
@@ -93,6 +96,7 @@ struct StateMashine {
   states current_state;
   Task::Base* current_task;
   states getCurrentState() { return current_state; };
+  void reset() { current_state = CHOOSE_TASK; };
   void nextStep() { current_state = static_cast<states>((current_state+1) % (RUN_TASK + 1)); };
 };
 
@@ -108,13 +112,23 @@ string handleChooseTaskStep(vector<Task::Base*> tasks) {
   return response;
 };
 
-string handleIntroduceTask(StateMashine* state, string request, vector<Task::Base*> tasks) {
-  int idx = stoi(request);
+string handleIntroduceTask(StateMashine* state, string* request, vector<Task::Base*> tasks) {
+  int idx = *request->c_str();
+  --idx;
+  string response;
   state->current_task = tasks[idx];
-  return state->current_task->helloMsg;
+  response.append(to_string(state->getCurrentState())).append(state->current_task->name).append(": ");
+  if (0 <= idx  && idx <= (int)tasks.size() ) {
+    response.append(state->current_task->helloMsg);
+  } else {
+    response.append("Invalid task number.");
+    state->reset();
+  }
+  return response;
 };
 
 string handleRunTask(StateMashine* state, string request) {
+
   return state->current_task->call(request);
 }
 
@@ -126,7 +140,7 @@ string buildResponse(StateMashine* state, string request, vector<Task::Base*> ta
       response = handleChooseTaskStep(tasks);
       break;
     case StateMashine::INTRODUCE_TASK:
-      response = handleIntroduceTask(state, request, tasks);
+      response = handleIntroduceTask(state, &request, tasks);
       break;
     case StateMashine::RUN_TASK:
       response = handleRunTask(state, request);
@@ -164,16 +178,12 @@ int main()
   string response, current_time;
   StateMashine state;
 
+
   while ( true ) {
+    cout << "Server state on step start: " << state.current_state << endl;
     fd = checkStep( accept(server, (struct sockaddr *)&addr, &addrlen) );
     checkStep( read(fd, buff, 256) );
-    if ( buff[0] == '0' ) {
-      // stop server
-      sleep(1);
-      cout << "Closing session." << endl;
-      close(fd);
-    } 
-    // if (nread == 0) std::cout << "End of file" << std::endl;
+
     // send response
     response = buildResponse(&state, buff, availableTasks);
     current_time = getCurrTime();
@@ -181,10 +191,12 @@ int main()
     checkStep( write(fd, response.c_str(), sizeof(response)) ); // number of written bytes
     current_time = getCurrTime();
     cout << '[' << current_time << "] server: " << response << endl;
+    cout << "Server state on step finish: " << state.current_state << endl;
 
     state.nextStep();
     close(fd);
   }
 
+    close(server);
   return 0;
 }
